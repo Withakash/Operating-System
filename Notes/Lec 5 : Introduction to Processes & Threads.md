@@ -1144,3 +1144,1210 @@ To improve security, stability, responsiveness, and performance. If one tab cras
 - **Processes** provide isolation; **Threads** provide lightweight parallelism.
 - Linux tools like `ps`, `top`, `htop`, and `kill` help observe and manage processes.
 - Java provides thread support using the `Thread` class and the `Runnable` interface.
+
+
+
+
+
+
+
+# Operating System - Process Management (Part 1)
+
+> **Module:** Process Management  
+> **Part 1 Topics Covered**
+>
+> - What is a Thread?
+> - Process vs Thread
+> - Introduction to Process States & Thread States
+>
+> **Level:** Beginner → Advanced
+>
+> **Language Used:** Theory + Practical + Interview + Java Examples
+
+---
+
+# Table of Contents
+
+1. What is a Thread?
+2. Why Threads?
+3. Thread Memory Structure
+4. Thread Components
+5. User Threads vs Kernel Threads
+6. Multithreading
+7. Concurrency vs Parallelism
+8. Process vs Thread
+9. Process Memory Layout
+10. Thread Memory Layout
+11. Process vs Thread Comparison
+12. Process Lifecycle
+13. Process States
+14. Thread States
+15. Java Thread States
+16. Practical Examples
+17. Java Programs
+18. Interview Questions
+19. Summary
+
+---
+
+# Chapter 1 : What is a Thread?
+
+## Definition
+
+A **Thread** is the **smallest unit of execution** inside a process.
+
+A process can contain one or more threads.
+
+A thread performs actual execution of instructions.
+
+> **Remember**
+>
+> Process = Resource Container
+>
+> Thread = Execution Unit
+
+---
+
+## Real Life Example
+
+### Restaurant
+
+```
+Restaurant (Process)
+
+├── Chef (Thread)
+
+├── Waiter (Thread)
+
+├── Cashier (Thread)
+
+└── Cleaner (Thread)
+```
+
+Everything is shared
+
+- Kitchen
+- Electricity
+- Ingredients
+
+Each worker performs different work.
+
+---
+
+## Another Example
+
+Chrome Browser
+
+```
+Chrome Process
+
+│
+
+├── UI Thread
+
+├── JavaScript Thread
+
+├── Download Thread
+
+├── Audio Thread
+
+├── Rendering Thread
+
+└── Network Thread
+```
+
+One application
+
+Multiple threads
+
+---
+
+# Why Threads?
+
+Suppose downloading a 5GB file.
+
+Without Threads
+
+```
+Download Starts
+
+↓
+
+Application Freezes
+
+↓
+
+Cannot Click Anything
+
+↓
+
+Wait
+```
+
+Poor User Experience.
+
+---
+
+With Threads
+
+```
+Main Thread
+
+↓
+
+User Interface
+
+------------------
+
+Download Thread
+
+↓
+
+Downloading
+
+------------------
+
+Background Thread
+
+↓
+
+Auto Save
+```
+
+Everything works simultaneously.
+
+---
+
+# Thread Memory Structure
+
+Threads share
+
+```
+Code
+
+Heap
+
+Global Variables
+
+Files
+
+Sockets
+```
+
+Each thread owns
+
+```
+Stack
+
+Registers
+
+Program Counter
+
+Thread State
+```
+
+---
+
+## Memory Diagram
+
+```
++--------------------------------+
+
+Process
+
+---------------------------------
+
+Code
+
+Heap
+
+Global Variables
+
+---------------------------------
+
+Thread 1 Stack
+
+Thread 2 Stack
+
+Thread 3 Stack
+
++--------------------------------+
+```
+
+---
+
+# Why Separate Stack?
+
+Example
+
+```java
+Thread A
+
+int x = 10;
+```
+
+```java
+Thread B
+
+int x = 50;
+```
+
+If stack were shared
+
+Variables would overwrite each other.
+
+Hence
+
+Every thread has its own stack.
+
+---
+
+# Components of Thread
+
+Every thread contains
+
+- Thread ID
+- Program Counter
+- Registers
+- Stack
+- Thread State
+
+---
+
+# User Threads vs Kernel Threads
+
+## User Thread
+
+Managed by Application.
+
+Examples
+
+- Java Thread
+- POSIX Thread
+
+Advantages
+
+- Faster creation
+- Less OS overhead
+
+---
+
+## Kernel Thread
+
+Managed by Operating System.
+
+Advantages
+
+- Better CPU utilization
+- Can run on multiple cores
+
+---
+
+# Multithreading
+
+Running multiple threads inside one process.
+
+Example
+
+```
+Music Player
+
+├── UI Thread
+
+├── Audio Thread
+
+├── Lyrics Thread
+
+└── Download Thread
+```
+
+---
+
+# Single Thread vs Multi Thread
+
+## Single Thread
+
+```
+Task A
+
+↓
+
+Task B
+
+↓
+
+Task C
+```
+
+Everything waits.
+
+---
+
+## Multi Thread
+
+```
+Thread 1 → Task A
+
+Thread 2 → Task B
+
+Thread 3 → Task C
+```
+
+Runs concurrently.
+
+---
+
+# Concurrency vs Parallelism
+
+## Concurrency
+
+One CPU
+
+```
+A
+
+↓
+
+B
+
+↓
+
+A
+
+↓
+
+B
+```
+
+Looks simultaneous.
+
+---
+
+## Parallelism
+
+Multiple CPU Cores
+
+```
+Core 1 → Task A
+
+Core 2 → Task B
+
+Core 3 → Task C
+```
+
+Actually simultaneous.
+
+---
+
+# Advantages of Threads
+
+- Faster execution
+- Better CPU utilization
+- Better responsiveness
+- Lower memory usage
+- Shared memory communication
+
+---
+
+# Disadvantages
+
+- Race Condition
+- Deadlock
+- Difficult debugging
+- Synchronization issues
+
+---
+
+# Java Example
+
+```java
+class MyThread extends Thread {
+
+    @Override
+    public void run() {
+
+        System.out.println("Thread Running");
+
+    }
+
+    public static void main(String[] args) {
+
+        MyThread t = new MyThread();
+
+        t.start();
+
+    }
+
+}
+```
+
+---
+
+# Runnable Example
+
+```java
+class Task implements Runnable {
+
+    @Override
+    public void run() {
+
+        System.out.println("Task Running");
+
+    }
+
+    public static void main(String[] args) {
+
+        Thread t = new Thread(new Task());
+
+        t.start();
+
+    }
+
+}
+```
+
+---
+
+# Practical Activity
+
+Linux / macOS
+
+```bash
+top
+```
+
+or
+
+```bash
+htop
+```
+
+Observe
+
+- CPU Usage
+- Running Processes
+- Memory Usage
+
+---
+
+# Java Practical
+
+```java
+public class Demo {
+
+    public static void main(String[] args) {
+
+        Thread t = Thread.currentThread();
+
+        System.out.println(t.getName());
+
+    }
+
+}
+```
+
+Output
+
+```
+main
+```
+
+---
+
+# Chapter 2 : Process vs Thread
+
+---
+
+# Process
+
+A process is an independent program in execution.
+
+Examples
+
+- Chrome
+- VS Code
+- Spotify
+- Word
+
+Each process has
+
+- Own Memory
+- Heap
+- Stack
+- Resources
+
+---
+
+# Thread
+
+Smallest execution unit inside a process.
+
+A process may contain many threads.
+
+---
+
+# Memory Layout
+
+## Process
+
+```
++---------------------------+
+
+Code
+
+Heap
+
+Stack
+
+Data
+
++---------------------------+
+```
+
+---
+
+## Threads
+
+```
++----------------------------------------+
+
+Code (Shared)
+
+Heap (Shared)
+
+Global Data (Shared)
+
+-----------------------------------------
+
+Thread 1 Stack
+
+Thread 2 Stack
+
+Thread 3 Stack
+
++----------------------------------------+
+```
+
+---
+
+# Resource Sharing
+
+## Process
+
+Separate
+
+- Memory
+- Heap
+- Variables
+
+Need IPC.
+
+---
+
+## Thread
+
+Shared
+
+- Heap
+- Code
+- Files
+- Resources
+
+Private
+
+- Stack
+- Registers
+- Program Counter
+
+---
+
+# Process vs Thread
+
+| Feature | Process | Thread |
+|----------|----------|---------|
+| Execution Unit | Independent | Inside Process |
+| Memory | Separate | Shared |
+| Heap | Separate | Shared |
+| Stack | Separate | Separate |
+| Creation | Slow | Fast |
+| Context Switch | Slow | Fast |
+| Communication | IPC | Shared Memory |
+| Failure | Independent | Can affect process |
+| Memory Usage | High | Low |
+
+---
+
+# Context Switching
+
+## Process Switching
+
+Save
+
+- PCB
+- Registers
+- Memory Mapping
+- Cache
+
+Heavy operation.
+
+---
+
+## Thread Switching
+
+Save
+
+- Registers
+- Program Counter
+- Stack Pointer
+
+Much faster.
+
+---
+
+# Java Example
+
+```java
+class Download extends Thread {
+
+    public void run() {
+
+        for(int i=1;i<=5;i++)
+            System.out.println("Downloading");
+
+    }
+
+}
+
+class Music extends Thread {
+
+    public void run() {
+
+        for(int i=1;i<=5;i++)
+            System.out.println("Playing");
+
+    }
+
+}
+
+public class Demo {
+
+    public static void main(String[] args) {
+
+        new Download().start();
+
+        new Music().start();
+
+    }
+
+}
+```
+
+Possible Output
+
+```
+Downloading
+
+Playing
+
+Downloading
+
+Playing
+```
+
+---
+
+# Advantages of Process
+
+- Better Isolation
+- Secure
+- Independent
+
+---
+
+# Advantages of Thread
+
+- Faster
+- Less Memory
+- Better Performance
+
+---
+
+# Disadvantages
+
+## Process
+
+- Slow
+- Heavy
+- High Memory
+
+---
+
+## Thread
+
+- Race Condition
+- Deadlock
+- Synchronization Problems
+
+---
+
+# Chapter 3 : Process States & Thread States
+
+---
+
+# Why Process States?
+
+CPU cannot execute all processes simultaneously.
+
+OS Scheduler decides
+
+- Who Runs
+- Who Waits
+- Who Stops
+
+---
+
+# Process Lifecycle
+
+```
+              New
+
+               │
+
+               ▼
+
+             Ready
+
+               │
+
+               ▼
+
+            Running
+
+          /     |      \
+
+         /      |       \
+
+ Waiting      Ready   Terminated
+
+      │
+
+      ▼
+
+    Ready
+```
+
+---
+
+# Process States
+
+## 1. New
+
+Process is created.
+
+OS
+
+- Creates PCB
+- Allocates Memory
+- Loads Program
+
+---
+
+## 2. Ready
+
+Everything prepared.
+
+Waiting for CPU.
+
+Stored inside Ready Queue.
+
+---
+
+## 3. Running
+
+Currently executing on CPU.
+
+---
+
+## 4. Waiting / Blocked
+
+Waiting for
+
+- Keyboard
+- Mouse
+- File
+- Network
+- Database
+
+Cannot continue until event completes.
+
+---
+
+## 5. Terminated
+
+Execution finished.
+
+OS releases
+
+- Memory
+- PCB
+- Resources
+
+---
+
+# Complete Example
+
+Opening Calculator
+
+```
+New
+
+↓
+
+Ready
+
+↓
+
+Running
+
+↓
+
+Waiting
+
+↓
+
+Ready
+
+↓
+
+Running
+
+↓
+
+Terminated
+```
+
+---
+
+# State Transition Diagram
+
+```
+New
+
+↓
+
+Ready
+
+↓
+
+Running
+
+├──────────────┐
+
+│              │
+
+│          Terminated
+
+│
+
+↓
+
+Waiting
+
+↓
+
+Ready
+```
+
+---
+
+# Thread Lifecycle
+
+```
+New
+
+↓
+
+Runnable
+
+↓
+
+Running
+
+↓
+
+Waiting / Blocked
+
+↓
+
+Runnable
+
+↓
+
+Running
+
+↓
+
+Terminated
+```
+
+---
+
+# Java Thread States
+
+Java defines
+
+| State | Description |
+|---------|-------------|
+| NEW | Object Created |
+| RUNNABLE | Ready / Running |
+| BLOCKED | Waiting for Lock |
+| WAITING | Waiting Forever |
+| TIMED_WAITING | Waiting for Time |
+| TERMINATED | Finished |
+
+---
+
+# Java Example
+
+```java
+class Demo extends Thread {
+
+    public void run() {
+
+        System.out.println("Running");
+
+    }
+
+    public static void main(String[] args) {
+
+        Demo t = new Demo();
+
+        System.out.println(t.getState());
+
+        t.start();
+
+        System.out.println(t.getState());
+
+    }
+
+}
+```
+
+Possible Output
+
+```
+NEW
+
+RUNNABLE
+```
+
+---
+
+# Practical Activity
+
+View Running Processes
+
+```bash
+ps -ef
+```
+
+or
+
+```bash
+top
+```
+
+Observe
+
+- PID
+- CPU Usage
+- Memory Usage
+
+---
+
+Thread State
+
+```java
+public class Demo {
+
+    public static void main(String[] args) {
+
+        Thread t = Thread.currentThread();
+
+        System.out.println(t.getName());
+
+        System.out.println(t.getState());
+
+    }
+
+}
+```
+
+Output
+
+```
+main
+
+RUNNABLE
+```
+
+---
+
+# Frequently Asked Interview Questions
+
+## Thread
+
+### What is a Thread?
+
+Smallest unit of execution inside a process.
+
+---
+
+### Why use Threads?
+
+To improve responsiveness and CPU utilization.
+
+---
+
+### What is Multithreading?
+
+Running multiple threads within one process.
+
+---
+
+## Process vs Thread
+
+### Which is faster?
+
+Thread.
+
+---
+
+### Which consumes more memory?
+
+Process.
+
+---
+
+### Which communicates faster?
+
+Thread.
+
+---
+
+### Can a process exist without a thread?
+
+No.
+
+---
+
+### Can a thread exist without a process?
+
+No.
+
+---
+
+## Process States
+
+### List Process States
+
+- New
+- Ready
+- Running
+- Waiting
+- Terminated
+
+---
+
+### Why does Waiting occur?
+
+Because process is waiting for I/O or another external event.
+
+---
+
+### Difference between Ready and Running?
+
+Ready
+
+Waiting for CPU.
+
+Running
+
+Currently executing.
+
+---
+
+# Complete Summary
+
+## Thread
+
+- Smallest execution unit
+- Shares process memory
+- Own Stack
+- Fast
+- Lightweight
+
+---
+
+## Process
+
+- Independent program
+- Own memory
+- Heavyweight
+- Secure
+- Better isolation
+
+---
+
+## Process States
+
+```
+New
+
+↓
+
+Ready
+
+↓
+
+Running
+
+↓
+
+Waiting
+
+↓
+
+Ready
+
+↓
+
+Running
+
+↓
+
+Terminated
+```
+
+---
+
+## Java Thread States
+
+- NEW
+- RUNNABLE
+- BLOCKED
+- WAITING
+- TIMED_WAITING
+- TERMINATED
+
+---
+
+# Next Module
+
+The next Process Management topics are:
+
+- Why CPU Scheduling?
+- Scheduler Types
+- Context Switching
+- CPU Burst & I/O Burst
+- Scheduling Algorithms Overview (FCFS, SJF, Priority, Round Robin)
