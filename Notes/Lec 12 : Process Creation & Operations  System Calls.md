@@ -1606,6 +1606,1070 @@ Parent Alive + Child Dead = ZOMBIE
 Parent Dead + Child Alive = ORPHAN
 ```
 
+
+# 🔍 Process Detective Lab
+
+## Exploring Linux Processes Practically
+
+**Subject:** Operating System
+**Topic:** Process Investigation and Visualization in Linux
+**Prerequisite:** Process, PID, PPID, `fork()`
+
+---
+
+# 🎯 Objective
+
+In this practical lab, we will become **Process Detectives**. 🕵️
+
+Instead of only learning theoretical definitions, we will investigate real processes running inside Linux.
+
+We will learn how to:
+
+* View running processes
+* Find a process using its name
+* Find PID and PPID
+* Visualize process trees
+* See only our own process tree
+* Run programs in the background
+* Observe parent and child processes
+* Monitor processes
+* Kill a process
+* Observe process states
+* Understand Zombie and Orphan processes
+
+---
+
+# 1. What is a Process?
+
+A **process** is a program that is currently executing.
+
+For example:
+
+When you run:
+
+```bash
+firefox
+```
+
+Linux creates one or more processes to execute the program.
+
+Every process has important information such as:
+
+```text
+Process Name
+PID
+PPID
+State
+CPU Usage
+Memory Usage
+```
+
+---
+
+# 2. Important Terms
+
+## PID — Process ID
+
+Every process has a unique identification number.
+
+Example:
+
+```text
+PID = 12345
+```
+
+---
+
+## PPID — Parent Process ID
+
+Every process is usually created by another process.
+
+The ID of the parent process is called:
+
+```text
+PPID
+```
+
+Example:
+
+```text
+PID = 12346
+PPID = 12345
+```
+
+This means:
+
+```text
+Process 12345
+      |
+      └── Process 12346
+```
+
+---
+
+# 3. First Process Detective Command — `ps`
+
+The `ps` command displays information about processes.
+
+Run:
+
+```bash
+ps
+```
+
+Example:
+
+```text
+PID TTY          TIME CMD
+1250 pts/0    00:00:00 bash
+1400 pts/0    00:00:00 ps
+```
+
+Here:
+
+| Column | Meaning       |
+| ------ | ------------- |
+| PID    | Process ID    |
+| TTY    | Terminal      |
+| TIME   | CPU time used |
+| CMD    | Command       |
+
+---
+
+# 4. View All Processes
+
+Run:
+
+```bash
+ps -ef
+```
+
+This displays detailed information about running processes.
+
+Example:
+
+```text
+UID        PID    PPID   CMD
+akash     1250      1    bash
+akash     1400   1250    ps
+```
+
+Notice:
+
+```text
+PID = 1400
+PPID = 1250
+```
+
+Therefore:
+
+```text
+bash(1250)
+     |
+     └── ps(1400)
+```
+
+---
+
+# 5. See PID, PPID and Process State
+
+Run:
+
+```bash
+ps -o pid,ppid,state,cmd
+```
+
+Example:
+
+```text
+PID    PPID   S   CMD
+1250      1   S   bash
+1450   1250   R   ps
+```
+
+---
+
+# 6. Understanding Process States
+
+The `state` column shows the current state of a process.
+
+Common states include:
+
+| Symbol | Meaning               |
+| ------ | --------------------- |
+| R      | Running               |
+| S      | Sleeping              |
+| D      | Uninterruptible Sleep |
+| T      | Stopped               |
+| Z      | Zombie                |
+
+Example:
+
+```text
+Z
+```
+
+means:
+
+> 🧟 Zombie Process
+
+---
+
+# 7. Process Tree Using `pstree`
+
+One of the most interesting Linux commands is:
+
+```bash
+pstree
+```
+
+It displays processes in a tree structure.
+
+Example:
+
+```text
+systemd
+ ├── bash
+ │    └── program
+ │         └── program
+ └── firefox
+```
+
+This helps us understand:
+
+```text
+Parent
+   |
+   └── Child
+         |
+         └── Child
+```
+
+---
+
+# 8. Display PID in Process Tree
+
+Run:
+
+```bash
+pstree -p
+```
+
+Example:
+
+```text
+bash(1250)───program(1400)───program(1401)
+```
+
+Now we can clearly see:
+
+```text
+bash
+ |
+ └── Parent Process
+       |
+       └── Child Process
+```
+
+---
+
+# ⭐ 9. See Only Your Requested Process Tree
+
+Sometimes:
+
+```bash
+pstree
+```
+
+shows the entire system.
+
+That can be confusing.
+
+Suppose your program has PID:
+
+```text
+12345
+```
+
+Run:
+
+```bash
+pstree -p 12345
+```
+
+Example:
+
+```text
+program(12345)───program(12346)
+```
+
+This shows only:
+
+```text
+Your Process
+     |
+     └── Child Process
+```
+
+---
+
+# 10. Find Your Process PID
+
+Suppose your program is named:
+
+```text
+zombie
+```
+
+Run:
+
+```bash
+pgrep zombie
+```
+
+Example:
+
+```text
+12345
+12346
+```
+
+These are the PIDs associated with the program.
+
+---
+
+# 11. Practical: Parent and Child Process Tree
+
+Create a program:
+
+```c
+#include <stdio.h>
+#include <unistd.h>
+
+int main() {
+
+    printf("Parent PID: %d\n", getpid());
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+
+        printf("Child PID: %d\n", getpid());
+
+        sleep(30);
+
+    } else {
+
+        sleep(30);
+    }
+
+    return 0;
+}
+```
+
+Save as:
+
+```text
+process_tree.c
+```
+
+Compile:
+
+```bash
+gcc process_tree.c -o process_tree
+```
+
+Run:
+
+```bash
+./process_tree
+```
+
+Example output:
+
+```text
+Parent PID: 12345
+Child PID: 12346
+```
+
+Open another terminal.
+
+Run:
+
+```bash
+pstree -p 12345
+```
+
+Example:
+
+```text
+process_tree(12345)───process_tree(12346)
+```
+
+🎉 You are now watching your Parent and Child process relationship.
+
+---
+
+# ⭐ 12. See the Process Tree of Your Current Shell
+
+A very useful command is:
+
+```bash
+pstree -p $$
+```
+
+The symbol:
+
+```bash
+$$
+```
+
+represents the PID of the current shell.
+
+Example:
+
+```text
+bash(1200)
+    |
+    └── process_tree(12345)
+             |
+             └── process_tree(12346)
+```
+
+This is excellent for understanding:
+
+```text
+Terminal
+   |
+ Shell
+   |
+ Parent Process
+   |
+ Child Process
+```
+
+---
+
+# 13. Run a Process in the Background
+
+Normally, when you run:
+
+```bash
+./program
+```
+
+the terminal waits for the program.
+
+To run it in the background:
+
+```bash
+./program &
+```
+
+Example:
+
+```bash
+sleep 100 &
+```
+
+Output:
+
+```text
+[1] 12345
+```
+
+Here:
+
+```text
+[1]      → Job Number
+12345    → Process ID
+```
+
+---
+
+# 14. Check Background Jobs
+
+Run:
+
+```bash
+jobs
+```
+
+Example:
+
+```text
+[1]+ Running    sleep 100 &
+```
+
+---
+
+# 15. Bring Background Process to Foreground
+
+Use:
+
+```bash
+fg
+```
+
+If there are multiple jobs:
+
+```bash
+fg %1
+```
+
+Example:
+
+```text
+Job 1 → Foreground
+```
+
+---
+
+# 16. Send a Process to the Background
+
+Suppose a process is currently running.
+
+Press:
+
+```text
+Ctrl + Z
+```
+
+This stops the process.
+
+Then run:
+
+```bash
+bg
+```
+
+The process continues in the background.
+
+---
+
+# 17. Find a Process Using `pgrep`
+
+Suppose you want to find:
+
+```text
+firefox
+```
+
+Run:
+
+```bash
+pgrep firefox
+```
+
+Example:
+
+```text
+2001
+2005
+2010
+```
+
+You can also display names:
+
+```bash
+pgrep -l firefox
+```
+
+Example:
+
+```text
+2001 firefox
+2005 firefox
+```
+
+---
+
+# 18. Monitor Processes Using `top`
+
+Run:
+
+```bash
+top
+```
+
+This displays processes in real time.
+
+You can observe:
+
+* CPU usage
+* Memory usage
+* Running processes
+* Process states
+
+Press:
+
+```text
+q
+```
+
+to exit.
+
+---
+
+# 19. Using `htop`
+
+If installed:
+
+```bash
+htop
+```
+
+This provides an easier visual interface.
+
+Install it using:
+
+```bash
+sudo apt install htop
+```
+
+Then:
+
+```bash
+htop
+```
+
+You can:
+
+* Search processes
+* Kill processes
+* View CPU usage
+* View memory usage
+* Monitor processes interactively
+
+---
+
+# 20. Kill a Process
+
+Suppose a process has PID:
+
+```text
+12345
+```
+
+Run:
+
+```bash
+kill 12345
+```
+
+This sends a termination signal to the process.
+
+---
+
+# 21. Force Kill a Process
+
+Sometimes a process does not terminate normally.
+
+You can use:
+
+```bash
+kill -9 12345
+```
+
+Conceptually:
+
+```text
+Process
+   |
+ kill signal
+   |
+   v
+Process Terminated
+```
+
+---
+
+# 22. Practical: Observe a Running Process
+
+Run:
+
+```bash
+sleep 100 &
+```
+
+Example:
+
+```text
+[1] 12345
+```
+
+Now investigate it.
+
+Find the process:
+
+```bash
+ps -p 12345
+```
+
+See detailed information:
+
+```bash
+ps -o pid,ppid,state,cmd -p 12345
+```
+
+Example:
+
+```text
+PID    PPID   S   CMD
+12345  1200   S   sleep 100
+```
+
+Now kill it:
+
+```bash
+kill 12345
+```
+
+Check jobs:
+
+```bash
+jobs
+```
+
+The process should no longer be running.
+
+---
+
+# 🧟 23. Practical: Investigating a Zombie Process
+
+Create:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main() {
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+
+        printf("Child PID: %d\n", getpid());
+
+        exit(0);
+
+    } else {
+
+        printf("Parent PID: %d\n", getpid());
+
+        printf("Parent sleeping for 30 seconds...\n");
+
+        sleep(30);
+    }
+
+    return 0;
+}
+```
+
+Compile:
+
+```bash
+gcc zombie.c -o zombie
+```
+
+Run:
+
+```bash
+./zombie
+```
+
+Open another terminal.
+
+Run:
+
+```bash
+ps -o pid,ppid,state,cmd
+```
+
+Look for:
+
+```text
+Z
+```
+
+Example concept:
+
+```text
+PID     PPID    STATE    CMD
+12346   12345     Z      [zombie]
+```
+
+This is a real:
+
+# 🧟 Zombie Process
+
+---
+
+# 👶 24. Practical: Investigating an Orphan Process
+
+Create:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main() {
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+
+        sleep(5);
+
+        printf("Child PID: %d\n", getpid());
+
+        printf("New PPID: %d\n", getppid());
+
+    } else {
+
+        printf("Parent PID: %d\n", getpid());
+
+        printf("Parent terminating...\n");
+
+        exit(0);
+    }
+
+    return 0;
+}
+```
+
+Compile:
+
+```bash
+gcc orphan.c -o orphan
+```
+
+Run:
+
+```bash
+./orphan
+```
+
+The parent terminates immediately.
+
+The child continues running.
+
+After a few seconds:
+
+```text
+Child PID: XXXX
+New PPID: XXXX
+```
+
+This demonstrates that the child has been re-parented.
+
+---
+
+# 25. Zombie vs Orphan Investigation
+
+## Zombie
+
+```text
+Parent = Alive
+Child = Dead
+```
+
+```text
+Parent
+   |
+   └── Zombie Child
+```
+
+The child has terminated.
+
+Its status has not yet been collected.
+
+---
+
+## Orphan
+
+```text
+Parent = Dead
+Child = Alive
+```
+
+```text
+Parent
+   X
+
+Child continues
+```
+
+The operating system re-parents the child.
+
+---
+
+# 26. Process Detective Challenge 🕵️
+
+Try the following.
+
+## Challenge 1
+
+Run:
+
+```bash
+sleep 60 &
+```
+
+Find:
+
+* PID
+* PPID
+* Process State
+
+Use:
+
+```bash
+ps -o pid,ppid,state,cmd
+```
+
+---
+
+## Challenge 2
+
+Display your shell process tree:
+
+```bash
+pstree -p $$
+```
+
+---
+
+## Challenge 3
+
+Create a Parent and Child using `fork()`.
+
+Find both processes.
+
+Display only their process tree.
+
+Use:
+
+```bash
+pstree -p PID
+```
+
+---
+
+## Challenge 4
+
+Create a Zombie Process.
+
+Find the process state:
+
+```text
+Z
+```
+
+---
+
+## Challenge 5
+
+Create an Orphan Process.
+
+Observe:
+
+```c
+getppid()
+```
+
+before and after the parent terminates.
+
+---
+
+# 27. Most Useful Commands — Cheat Sheet
+
+| Command                    | Purpose                      |
+| -------------------------- | ---------------------------- |
+| `ps`                       | Show processes               |
+| `ps -ef`                   | Show detailed processes      |
+| `ps -o pid,ppid,state,cmd` | Show PID, PPID and state     |
+| `pstree`                   | Show process tree            |
+| `pstree -p`                | Show tree with PID           |
+| `pstree -p PID`            | Show a specific process tree |
+| `pgrep name`               | Find process by name         |
+| `pgrep -l name`            | Find PID and name            |
+| `top`                      | Monitor processes            |
+| `htop`                     | Interactive process monitor  |
+| `jobs`                     | Show background jobs         |
+| `fg`                       | Bring job to foreground      |
+| `bg`                       | Continue job in background   |
+| `kill PID`                 | Terminate process            |
+| `kill -9 PID`              | Force terminate process      |
+| `$$`                       | PID of current shell         |
+
+---
+
+# 28. Final Process Detective Diagram
+
+```text
+                    🖥️ LINUX SYSTEM
+                           |
+                           v
+                        SHELL
+                           |
+                           |
+                      ./program
+                           |
+                         fork()
+                           |
+                 -------------------
+                 |                 |
+                 v                 v
+
+              Parent             Child
+                 |                 |
+                 |               exec()
+                 |                 |
+               wait()           Program
+                 |
+                 |
+             ps / pstree
+                 |
+                 v
+
+        🔍 PROCESS DETECTIVE
+```
+
+---
+
+# 🎯 Final Learning Outcome
+
+After completing this practical lab, students should be able to:
+
+* Understand real processes running inside Linux.
+* Identify PID and PPID.
+* Find processes using `ps` and `pgrep`.
+* Visualize Parent and Child relationships.
+* Use `pstree` to investigate process trees.
+* Display only a specific process tree.
+* Monitor processes using `top`.
+* Run programs in the background.
+* Terminate processes using `kill`.
+* Observe Zombie Processes.
+* Understand Orphan Processes practically.
+
+---
+
+# 🔥 Final Message
+
+Operating Systems become much more interesting when you stop asking:
+
+> **"What is a process?"**
+
+and start asking:
+
+> **"Where is my process right now, who created it, what is its state, and what happens when I kill it?"** 🕵️💻
+
+That is the beginning of becoming an **Operating System Process Detective**. 🔍🚀
+
 ---
 
 # End of Notes
