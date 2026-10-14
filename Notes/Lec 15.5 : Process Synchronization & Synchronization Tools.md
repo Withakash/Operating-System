@@ -1,745 +1,548 @@
-# Operating Systems --- Student Notes
+# Process Synchronization, Critical Section & Synchronization Tools
+## Student Notes — Operating Systems
 
-## Lecture 21: Process Synchronization \| Lecture 22: Synchronization Tools
+These notes follow the examples and explanations from the process synchronization and critical section lessons, with additional topics on Peterson's solution, mutexes, semaphores, binary/counting semaphores, and the producer–consumer problem.
 
-**Level:** Beginner-friendly, university exam preparation\
-**Learning goal:** Understand why concurrent processes need
-coordination, how critical sections are protected, and how mutexes,
-semaphores, and monitors help.
+---
 
-------------------------------------------------------------------------
+# Lec 21 — Process Synchronization and Critical Section
 
-# Part A --- Lecture 21: Process Synchronization
+## 1. Process Synchronization
 
-## 1. What is process synchronization?
+A modern operating system runs many processes. On a single-CPU system, the CPU can switch quickly between processes; on a multi-core system, processes may also run in parallel.
 
-A modern operating system can run many processes and threads
-concurrently. Even on a single CPU core, the operating system can switch
-rapidly between tasks, making them appear to run at the same time. On
-multicore systems, tasks may genuinely execute in parallel.
+Some processes are independent, while others cooperate by sharing data or resources.
 
-When two or more tasks use the same data or resource, their operations
-may overlap. **Process synchronization** is the coordination of these
-tasks so that shared data remains correct and operations happen in a
-safe order.
+### Types of processes
 
-### Everyday analogy
+**Independent processes**
+- The execution of one process does not affect another.
+- They do not share data or resources in a way that affects each other's results.
+- Example: two processes working with unrelated data.
 
-Imagine two students editing the same marks spreadsheet at the same
-time. If both read an old value and then save different updates, one
-student's change may overwrite the other's. A coordination rule---such
-as allowing only one editor to update a particular record at a
-time---helps prevent this problem.
+**Cooperating processes**
+- The execution of one process can affect another because they share something.
+- They may share a variable, memory, a buffer, code, or a resource such as a printer.
+- Example: two processes updating the same `count` variable.
 
-### Important terms
+### Why is synchronization needed?
 
--   **Concurrency:** Multiple tasks make progress during overlapping
-    periods.
--   **Parallelism:** Multiple tasks execute at the same instant, usually
-    on different cores.
--   **Shared resource:** Data or an object used by more than one
-    process/thread, such as a variable, file, printer, or bank balance.
--   **Atomic operation:** An operation that appears indivisible to other
-    concurrent tasks.
--   **Synchronization:** Coordination that controls access to shared
-    resources or the order of events.
+If cooperating processes access and update shared data without coordination, the result may become incorrect. **Process synchronization** coordinates their access so that shared data remains consistent.
 
-## 2. Race condition
+Think of an ATM: customers use the same machine in an orderly way. Shared data in a computer also needs controlled access.
 
-A **race condition** occurs when the result of a program depends on the
-timing or interleaving of concurrent operations that access shared
-state.
+### Diagram: Types of processes
 
-### Example: lost update
-
-Suppose a shared variable `balance` is initially `100`. Two threads each
-add `50`.
-
-A simplified increment is not necessarily one indivisible action. It may
-involve: 1. Read the current value. 2. Calculate the new value. 3. Write
-the new value.
-
-If both threads read `100` before either writes, both calculate `150`.
-Both may then write `150`, although the correct final value should be
-`200`.
-
-``` mermaid
-sequenceDiagram
-    participant T1 as Thread 1
-    participant M as Shared balance
-    participant T2 as Thread 2
-    Note over M: Initial value = 100
-    T1->>M: Read 100
-    T2->>M: Read 100
-    T1->>T1: Calculate 100 + 50 = 150
-    T2->>T2: Calculate 100 + 50 = 150
-    T1->>M: Write 150
-    T2->>M: Write 150
-    Note over M: Final value = 150 (incorrect)
+```text
+                         Processes
+                             |
+                +------------+------------+
+                |                         |
+          Independent                Cooperating
+           Processes                  Processes
+                |                         |
+       One does not affect       Share data/resources
+          the other              (variable, memory,
+                                  buffer, code, device)
+                                           |
+                                  Need synchronization
 ```
 
-The problem is not that addition is mathematically incorrect. The
-problem is that the **read--modify--write sequence was not protected**.
+---
 
-### How can it be prevented?
+## 2. Race Condition
 
--   Protect the shared update with a mutex/lock.
--   Use an appropriate atomic operation.
--   Use a semaphore or another synchronization mechanism where suitable.
--   Design the program to avoid unnecessary shared mutable state.
-
-### Demonstration idea
-
-Ask students to imagine two threads incrementing one shared counter
-100,000 times each. Without synchronization, the final count may be less
-than 200,000. With a correct lock or atomic increment, the expected
-result is 200,000. In real code, the result depends on the language,
-compiler, and runtime; a race demonstration should use a properly
-constructed concurrent program rather than relying on a particular
-output every run.
-
-## 3. The critical section problem
-
-A **critical section** is the part of a program where a process or
-thread accesses shared data or a shared resource in a way that requires
-coordination.
-
-A typical process structure is:
-
-``` text
-do {
-    Entry section       // request permission to enter
-    Critical section   // access/update shared resource
-    Exit section       // release permission
-    Remainder section  // other work
-} while (true);
-```
-
-``` mermaid
-flowchart TD
-    A[Process performs other work] --> B[Entry section]
-    B --> C{Permission granted?}
-    C -- No --> B
-    C -- Yes --> D[Critical section]
-    D --> E[Exit section]
-    E --> A
-```
+A **race condition** occurs when the result depends on the order or timing in which concurrent processes access and update shared data.
 
 ### Example
 
-A program has a shared variable:
+Assume a shared variable starts at `5`. Two processes use it:
 
-``` c
-int seats_available = 1;
+```text
+Process P1                         Process P2
+---------                         ---------
+X = shared                        Y = shared
+X = X + 1                         Y = Y - 1
+sleep(1)                          sleep(1)
+shared = X                        shared = Y
 ```
 
-Two booking threads may both check that a seat is available and then
-both reserve it unless checking and updating the seat are coordinated.
-The protected operation should cover the logically connected
-check-and-update, not merely one individual line.
+- `shared` is common to both processes.
+- `X` and `Y` are local variables.
+- P1 adds 1; P2 subtracts 1.
+- The expected final value is `5`, because adding 1 and subtracting 1 should cancel out.
 
-### Four common parts
+### One interleaving that produces the wrong result
 
-1.  **Entry section:** Requests entry into the critical section.
-2.  **Critical section:** Uses or modifies the protected shared
-    resource.
-3.  **Exit section:** Releases access or updates synchronization state.
-4.  **Remainder section:** Performs work that does not need the
-    protected resource.
+Initial value: `shared = 5`
 
-The critical-section problem asks us to design a protocol that
-coordinates these parts correctly.
+| Step | Process | Operation | Result |
+|---:|---|---|---|
+| 1 | P1 | `X = shared` | `X = 5` |
+| 2 | P1 | `X = X + 1` | `X = 6` |
+| 3 | P1 | `sleep(1)` | P1 pauses |
+| 4 | P2 | `Y = shared` | `Y = 5` |
+| 5 | P2 | `Y = Y - 1` | `Y = 4` |
+| 6 | P2 | `sleep(1)` | P2 pauses |
+| 7 | P1 | `shared = X` | `shared = 6` |
+| 8 | P2 | `shared = Y` | `shared = 4` |
 
-## 4. Three requirements for a correct solution
+Final value: `4` — incorrect. With a different interleaving, the final value may be `6`. The expected value is `5`.
 
-A classical solution to the critical-section problem is evaluated using
-three requirements.
+```text
+shared = 5
+   |
+   +--> P1 reads 5 --> local X = 5 --> increments X to 6 --+
+   |                                                       |
+   +--> P2 reads 5 --> local Y = 5 --> decrements Y to 4 --+
+                                                           |
+                                         writes may overlap
+                                                           |
+                                       final value: 4 or 6
+                                       expected value: 5
+```
 
-### 4.1 Mutual exclusion
+**Note:** `sleep(1)` is used in this example to demonstrate pausing and switching between processes. It is not a synchronization solution by itself.
 
-At most one process can be inside the critical section for a particular
-protected resource at a time.
+### Why is it called a race condition?
 
-**Why it matters:** If two threads update the same data simultaneously,
-an update may be lost or the data may become inconsistent.
+Both processes are effectively racing to write their result to the shared variable. The final result depends on which write happens last.
+
+**Remember:** Shared data + concurrent access + no proper coordination can lead to a race condition.
+
+---
+
+## 3. Critical Section
+
+A **critical section** is the part of a process's code where it accesses or updates shared data or shared resources.
+
+For example, if P1 and P2 both use the same `count` variable, the instructions that read or update `count` belong in their critical sections. Code that only uses private variables can be part of the non-critical (remainder) section.
+
+### Diagram: Structure of a process
+
+```text
+Process P1                         Process P2
++----------------------+           +----------------------+
+| Non-critical section |           | Non-critical section |
+| private work (x, y)  |           | private work (a, b)  |
++----------------------+           +----------------------+
+            |                                  |
+            v                                  v
++----------------------+           +----------------------+
+|     Entry section    |           |     Entry section    |
+| request permission   |           | request permission   |
++----------------------+           +----------------------+
+            |                                  |
+            v                                  v
++----------------------+           +----------------------+
+|   Critical section   |           |   Critical section   |
+| shared data/resource |           | shared data/resource |
++----------------------+           +----------------------+
+            |                                  |
+            v                                  v
++----------------------+           +----------------------+
+|      Exit section    |           |      Exit section    |
+| release permission   |           | release permission   |
++----------------------+           +----------------------+
+            |                                  |
+            v                                  v
+      remainder work                    remainder work
+```
+
+### Four parts of a process structure
+
+1. **Entry section:** Requests permission to enter the critical section. A lock or synchronization mechanism may be used here.
+2. **Critical section:** Accesses or modifies shared data/resources.
+3. **Exit section:** Releases the lock or signals that the process has left the critical section.
+4. **Remainder section:** The rest of the process's work that does not require access to the shared resource.
+
+A process should not enter a shared-data critical section without following the synchronization rules. Otherwise, two processes may update the same data unsafely and cause a race condition.
+
+### Everyday example: One washroom
+
+- The washroom is the critical section.
+- Checking/unlocking the door is like the entry section.
+- Using the washroom is the critical section.
+- Locking/unlocking appropriately when leaving represents releasing access in the exit section.
+- Other activities are the remainder section.
+
+---
+
+## 4. Requirements for a Correct Synchronization Solution
+
+A synchronization solution is evaluated using four important requirements.
+
+### 4.1 Mutual Exclusion
+
+At most **one process at a time** may be inside the critical section for a particular shared resource.
+
+Example: If P1 is using the shared resource in its critical section, P2 must wait outside until P1 leaves.
+
+```text
+P1: [ ENTRY ] ---> [ CRITICAL SECTION ] ---> [ EXIT ]
+                           |
+                     resource in use
+                           |
+P2: [ ENTRY ] ---> WAIT --------------------> [ ENTER later ]
+```
+
+If P1 and P2 enter the same protected critical section at the same time, mutual exclusion has been violated.
 
 ### 4.2 Progress
 
-If no process is inside the critical section and some processes wish to
-enter, the choice of the next process must not be postponed
-indefinitely. Only processes that want to enter should participate in
-deciding who goes next.
+If no process is inside the critical section and some processes want to enter, the decision about who enters next should not be delayed indefinitely by processes that are not trying to enter.
 
-**Why it matters:** A process should not be blocked for no good reason
-when the resource is free.
+Example: The shared resource is free and P1 wants to use it. A process that is not interested in entering should not block P1 unnecessarily.
 
-### 4.3 Bounded waiting
+### 4.3 Bounded Waiting
 
-After a process requests entry, there must be a bound on how many times
-other processes can enter their critical sections before the waiting
-process gets its turn.
+After a process requests entry, there must be a limit on how many times other processes can enter before that request is granted.
 
-**Why it matters:** It prevents indefinite postponement (starvation)
-under the stated assumptions.
+Example: P2 is waiting. P1 should not be allowed to re-enter forever while P2 waits. This prevents indefinite waiting, also called starvation.
 
-``` mermaid
-flowchart TD
-    A[Correct critical-section solution] --> B[Mutual Exclusion]
-    A --> C[Progress]
-    A --> D[Bounded Waiting]
-    B --> E[No unsafe simultaneous entry]
-    C --> F[No unnecessary delay when free]
-    D --> G[No indefinite postponement]
-```
+### 4.4 No Assumption About Hardware or Relative Speed
 
-**Exam tip:** Remember the phrase **M-P-B**: Mutual Exclusion, Progress,
-Bounded Waiting. All three are important; satisfying only mutual
-exclusion is not enough.
+A correct general solution should not rely on a particular CPU speed or on one process always being faster than another. It should work based on its synchronization rules, not timing guesses.
 
-## 5. Peterson's solution
+### Quick summary
 
-Peterson's solution is a classic software algorithm that demonstrates
-how **two processes** can coordinate access to a critical section using
-shared variables, without relying on a special lock instruction in the
-conceptual model.
+| Requirement | Easy meaning |
+|---|---|
+| Mutual exclusion | Only one process in the critical section at a time |
+| Progress | If the section is free, an interested process can be selected |
+| Bounded waiting | A waiting process will not wait forever |
+| No hardware/speed assumption | Do not rely on a particular CPU speed or process timing |
 
-It is mainly important for understanding synchronization principles.
-Modern production code should normally use language/runtime
-synchronization primitives rather than implementing Peterson's algorithm
-directly.
+---
 
-### Shared variables
+## 5. Peterson's Solution
 
-For two processes, `P0` and `P1`:
+Peterson's solution is a classic software method for demonstrating mutual exclusion between **two processes**, usually called P0 and P1. It uses two shared variables:
 
-``` c
-boolean flag[2] = {false, false};
+- `flag[2]`: `flag[i] = true` means process Pi wants to enter its critical section.
+- `turn`: indicates which process should wait when both processes want to enter at the same time.
+
+### Pseudocode
+
+```c
+// Shared variables
+bool flag[2] = {false, false};
 int turn;
-```
 
--   `flag[i] = true` means process `Pi` wants to enter the critical
-    section.
--   `turn = j` gives the other process `Pj` priority when both processes
-    want to enter.
-
-### Pseudocode for process `Pi`
-
-Let `j = 1 - i`.
-
-``` c
+// Code for process Pi; j is the other process (0 or 1)
 do {
-    flag[i] = true;   // I want to enter
-    turn = j;         // Give the other process priority
-
+    flag[i] = true;  // Pi wants to enter
+    turn = j;        // give the other process priority
     while (flag[j] && turn == j) {
-        // Busy wait
+        ;             // wait
     }
 
-    /* CRITICAL SECTION */
+    // CRITICAL SECTION
 
-    flag[i] = false;  // I am leaving
+    flag[i] = false; // Pi leaves; no longer interested
 
-    /* REMAINDER SECTION */
+    // REMAINDER SECTION
+
 } while (true);
 ```
 
+Here, `i` is the current process and `j` is the other process.
+
 ### How it works
 
-1.  A process raises its own flag to indicate interest.
-2.  It sets `turn` to the other process, giving that process priority if
-    both compete.
-3.  It waits only when the other process is interested **and** it is the
-    other process's turn.
-4.  When it exits, it lowers its flag so the other process can proceed.
+1. A process raises its flag to announce that it wants to enter.
+2. It sets `turn` to the other process, giving the other process priority if both compete.
+3. It waits only when the other process also wants to enter and it is the other process's turn.
+4. After leaving the critical section, it lowers its flag.
 
-### Visual intuition
+**Limitation:** The classic solution is for two processes and relies on assumptions about shared-memory operations and memory ordering. Modern systems generally use operating-system or hardware-supported synchronization primitives instead.
 
-``` mermaid
-flowchart TD
-    A[Pi wants to enter] --> B[flag[i] = true]
-    B --> C[turn = j]
-    C --> D{flag[j] is true AND turn = j?}
-    D -- Yes --> E[Busy wait]
-    E --> D
-    D -- No --> F[Enter critical section]
-    F --> G[flag[i] = false]
-    G --> H[Remainder section]
-```
+---
 
-### Why it satisfies the classical requirements
-
--   **Mutual exclusion:** If both flags are true, the single shared
-    `turn` value cannot give both processes priority simultaneously. At
-    least one must wait.
--   **Progress:** If only one process wants to enter, the other
-    process's flag is false, so the interested process does not wait on
-    the loop condition.
--   **Bounded waiting:** If both want to enter, `turn` resolves the
-    competition. Once a process has requested entry, the other process
-    cannot repeatedly bypass it indefinitely under the algorithm's
-    assumptions.
-
-### Limitations and assumptions
-
--   It is designed for **two processes** in its basic form.
--   It uses **busy waiting**: a waiting process repeatedly checks a
-    condition and consumes CPU time.
--   The classical proof assumes suitable atomic reads/writes and a
-    sequentially consistent memory model. Modern compilers and
-    processors may reorder memory operations; a literal implementation
-    using ordinary variables in modern C/C++/Java is not automatically
-    correct.
--   For real programs, use appropriate mutexes, semaphores, or
-    language-specific concurrency tools.
-
-**Exam tip:** Be able to write the shared variables, pseudocode, and
-explain the three critical-section requirements.
-
-------------------------------------------------------------------------
-
-# Part B --- Lecture 22: Synchronization Tools
+# Lec 22 — Synchronization Tools
 
 ## 6. Mutex
 
-A **mutex** (mutual-exclusion lock) is a synchronization primitive used
-to protect a critical section. A thread must acquire the mutex before
-accessing the protected region and release it when finished.
+A **mutex** (mutual-exclusion lock) is a synchronization tool that protects a critical section so only one thread/process holding the lock can access the protected section at a time.
 
-### Basic pattern
+### Basic working
 
-``` text
-lock(mutex)
-    // critical section
-unlock(mutex)
+```text
+          Process wants the resource
+                      |
+                      v
+                 [ lock mutex ]
+                    /      \
+             Available     Locked
+                 |            |
+                 v            v
+          Enter critical    Wait until
+              section       available
+                 |
+                 v
+          Use shared data
+                 |
+                 v
+               unlock
+                 |
+                 v
+          Another can enter
 ```
 
-If one thread already holds the mutex, another thread attempting to
-acquire it must wait or otherwise be prevented from entering, depending
-on the mutex implementation.
+### Basic pseudocode
 
-``` mermaid
-flowchart TD
-    A[Thread requests mutex] --> B{Mutex available?}
-    B -- Yes --> C[Acquire mutex]
-    C --> D[Enter critical section]
-    D --> E[Finish protected work]
-    E --> F[Release mutex]
-    F --> G[Another waiting thread may proceed]
-    B -- No --> H[Wait / block]
-    H --> B
+```text
+lock(mutex);
+
+// Critical section
+shared_count = shared_count + 1;
+
+unlock(mutex);
 ```
 
-### Example
+- `lock(mutex)`: acquire the lock; if another process holds it, wait.
+- Critical section: access the shared resource safely.
+- `unlock(mutex)`: release the lock so another process can acquire it.
 
-Two threads update a shared counter. The lock must cover the entire
-read-and-update operation, not just the final write.
+### Analogy
 
-``` text
-lock(counter_mutex)
-counter = counter + 1
-unlock(counter_mutex)
-```
+Imagine a single key to a room. The person holding the key can enter. Others wait until the key is returned.
 
-This is conceptual pseudocode. The exact API differs by programming
-language.
+**Important:** The program must release the mutex correctly. A mutex protects access; it does not automatically make unrelated code safe.
 
-### Important points
-
--   A mutex is commonly used for **mutual exclusion**.
--   A mutex generally has ownership: the thread that locks it is
-    expected to unlock it.
--   Keep critical sections short to reduce waiting.
--   Always consider what happens if code exits early or an error occurs;
-    many languages provide scoped-lock patterns to release locks safely.
--   Incorrect lock ordering can cause deadlock.
+---
 
 ## 7. Semaphores
 
-A **semaphore** is a synchronization primitive that maintains a counter
-and supports atomic operations commonly called `wait()` and `signal()`.
+A **semaphore** is a synchronization tool represented by a counter and accessed through atomic operations. It can coordinate processes and control access to shared resources.
 
-Different textbooks use different names: - `wait()` may be called `P()`
-or `down()`. - `signal()` may be called `V()` or `up()`.
+The two classic operations are:
 
-### Conceptual operations
+- **`wait(S)`** — also called `P` or acquire: attempts to take a permit. If no permit is available, the process waits.
+- **`signal(S)`** — also called `V` or release: returns a permit or wakes a waiting process, depending on the implementation.
 
-``` text
-wait(S):
-    atomically wait until the resource/condition can be acquired
-    then decrement S
+Semaphore operations must be atomic, meaning the operation cannot be interrupted halfway through in a way that breaks synchronization.
 
-signal(S):
-    atomically increment/release S
-    and potentially wake a waiting process
+### Conceptual working
+
+```text
+             wait(S)
+                |
+                v
+       Is permission available?
+            /          \
+          Yes            No
+           |              |
+           v              v
+     Continue into      Wait/block
+     protected work     until signalled
+           |
+           v
+        signal(S)
+           |
+           v
+    Release permission
 ```
 
-The operations must be atomic. The pseudocode above describes the
-concept, not a safe implementation using an ordinary integer.
+### Example: Protecting a critical section with a binary semaphore
 
-### Two common uses
+```text
+semaphore S = 1;
 
-1.  **Resource counting:** Track how many identical resource instances
-    are available.
-2.  **Event/order synchronization:** Make one task wait until another
-    task signals that an event has happened.
+wait(S);
 
-### Example: one printer
+// Critical section
+shared_count = shared_count + 1;
 
-If the system has one printer available, a counting semaphore can be
-initialized to `1`. A process performs `wait(printer)` before using the
-printer and `signal(printer)` when it finishes.
+signal(S);
+```
+
+With an initial value of `1`, one process can acquire permission. Other processes must wait until the permission is released. This is conceptual pseudocode; actual API syntax may differ.
 
 ### Mutex vs semaphore
 
-  -----------------------------------------------------------------------
-  Feature                 Mutex                   Semaphore
-  ----------------------- ----------------------- -----------------------
-  Main purpose            Mutual exclusion        Resource counting
-                                                  and/or event
-                                                  coordination
+| Mutex | Semaphore |
+|---|---|
+| Primarily used for mutual exclusion | Used for signalling and/or resource counting |
+| Usually has ownership: the thread that locks it should unlock it | Generally does not have the same ownership rule |
+| Typically represents locked/unlocked | Has a counter or permits |
+| Often protects one critical section | Can control access to one or multiple resource instances |
 
-  State                   Typically               Counter
-                          locked/unlocked         
+---
 
-  Ownership               Usually owned by the    Generally no ownership
-                          locking thread          requirement in the same
-                                                  sense
-
-  Common operations       lock / unlock           wait / signal
-
-  Typical use             Protect shared data     Limit concurrent access
-                                                  or order tasks
-  -----------------------------------------------------------------------
-
-A binary semaphore may also be used for mutual exclusion, but it is not
-identical to a mutex in every API or ownership rule.
-
-## 8. Binary vs counting semaphore
+## 8. Binary vs Counting Semaphore
 
 ### Binary semaphore
 
-A binary semaphore has two logical states, usually `0` and `1`.
+- Its value is restricted to `0` or `1`.
+- It can represent one available permission/resource.
+- Commonly used for simple signalling or mutual-exclusion-like coordination.
+- It is not identical to a mutex because ownership rules may differ.
 
--   `1` can represent an available permit.
--   `0` can represent no permit available.
-
-It can be used to control access to a single resource or signal an
-event, depending on how it is designed.
+```text
+S = 1  --> permission available
+wait(S) --> S becomes 0; one process proceeds
+S = 0  --> another process must wait
+signal(S) --> permission is released
+```
 
 ### Counting semaphore
 
-A counting semaphore tracks multiple available permits.
+- Its counter represents multiple available instances of a resource.
+- It is initialized to the number of available resources.
+- A successful `wait` consumes one permit; `signal` returns a permit.
 
-**Example:** A lab has five identical computers available for a
-particular shared service. Initialize a semaphore to `5`. Each user must
-acquire one permit before using a computer and return the permit
-afterward. At most five users can hold permits simultaneously.
+**Example:** A lab has four identical printers. Initialize `printer = 4`. Up to four processes can use a printer at once. When all four are busy, another process waits until one becomes available.
 
-``` mermaid
-flowchart LR
-    A[Counting semaphore = 5] --> B[Acquire permit]
-    B --> C[4 permits remain]
-    C --> D[Another user acquires]
-    D --> E[3 permits remain]
-    E --> F[Users release permits when finished]
-    F --> A
+```text
+Counting semaphore: printer = 4
+
+P1 acquires --> 3 permits left
+P2 acquires --> 2 permits left
+P3 acquires --> 1 permit left
+P4 acquires --> 0 permits left
+P5 requests --> waits
+One process finishes and signals --> a permit becomes available
+P5 can then proceed
 ```
 
-  -----------------------------------------------------------------------
-  Feature                 Binary semaphore        Counting semaphore
-  ----------------------- ----------------------- -----------------------
-  Logical range           0 or 1                  Non-negative count
+### Comparison
 
-  Represents              One permit or an event  Number of available
-                          state                   permits/resources
+| Feature | Binary semaphore | Counting semaphore |
+|---|---|---|
+| Counter values | 0 or 1 | 0 or more, normally |
+| Represents | One permission/resource or a signal | Multiple identical resource instances |
+| Initial value | Often 0 or 1, depending on purpose | Usually the number of available resources |
+| Example | One shared access permission | Four printers available |
+| Waiting | Wait when permission is unavailable | Wait when count reaches zero |
 
-  Example                 One available slot      Five identical devices
+---
 
-  Maximum concurrent      Usually one             Up to the initial
-  permit holders                                  count, if used as a
-                                                  resource semaphore
-  -----------------------------------------------------------------------
+## 9. Producer–Consumer Problem Using Semaphores
 
-**Caution:** A semaphore is not a substitute for thoughtful design. If a
-permit is not returned, tasks can remain blocked. If `signal()` is
-called incorrectly, the program may allow too much concurrent access.
+The **Producer–Consumer Problem** is a classic process synchronization problem. A producer creates items and places them in a shared buffer. A consumer removes items from that buffer.
 
-## 9. Producer--Consumer problem using semaphores
+The processes must be coordinated so:
+1. The producer does not insert an item when the buffer is full.
+2. The consumer does not remove an item when the buffer is empty.
+3. Both processes do not modify the shared buffer unsafely at the same time.
 
-This is a classic synchronization problem. A **producer** creates items
-and places them into a shared bounded buffer. A **consumer** removes
-items from that buffer.
+For a basic bounded-buffer solution, use three semaphores:
 
-We must prevent three errors: 1. The producer inserting into a full
-buffer. 2. The consumer removing from an empty buffer. 3. The producer
-and consumer corrupting shared buffer metadata by modifying it
-simultaneously.
+| Semaphore | Initial value | Purpose |
+|---|---:|---|
+| `mutex` | 1 | Protects the shared buffer |
+| `empty` | N | Counts empty slots |
+| `full` | 0 | Counts filled slots |
 
-### Required semaphores
+Here, `N` is the buffer capacity. `mutex` is a binary semaphore; `empty` and `full` are counting semaphores.
 
-For a buffer with capacity `N`:
+### Producer process
 
-``` text
-mutex = 1   // mutual exclusion for buffer operations
-empty = N   // number of empty slots
-full  = 0   // number of occupied slots
+```text
+while (true) {
+    item = produce_item();
+
+    wait(empty);     // wait for an empty slot
+    wait(mutex);     // lock buffer access
+
+    insert_item(item);
+
+    signal(mutex);   // release buffer access
+    signal(full);    // one more filled slot
+}
 ```
 
-### Producer pseudocode
+### Consumer process
 
-``` text
-while true:
-    item = produce_item()
+```text
+while (true) {
+    wait(full);      // wait for an available item
+    wait(mutex);     // lock buffer access
 
-    wait(empty)       // reserve an empty slot
-    wait(mutex)       // enter buffer critical section
+    item = remove_item();
 
-    insert(item)
+    signal(mutex);   // release buffer access
+    signal(empty);   // one more empty slot
 
-    signal(mutex)     // leave critical section
-    signal(full)      // announce one more full slot
-```
-
-### Consumer pseudocode
-
-``` text
-while true:
-    wait(full)        // reserve an available item
-    wait(mutex)       // enter buffer critical section
-
-    item = remove()
-
-    signal(mutex)     // leave critical section
-    signal(empty)     // announce one more empty slot
-
-    consume_item(item)
+    consume_item(item);
+}
 ```
 
 ### Diagram
 
-``` mermaid
-flowchart LR
-    P[Producer] -->|wait empty, wait mutex| B[Shared bounded buffer]
-    B -->|signal full| C[Consumer]
-    C -->|wait full, wait mutex| B
-    B -->|signal empty| P
+```text
+                 PRODUCER
+                    |
+              produce item
+                    |
+               wait(empty)
+                    |
+               wait(mutex)
+                    |
+                    v
+          +---------------------+
+          |    SHARED BUFFER    |
+          | [item][item][ empty]|
+          +---------------------+
+                    |
+               signal(mutex)
+                    |
+                signal(full)
+                    |
+                    v
+                 CONSUMER
+                    |
+                 wait(full)
+                    |
+                wait(mutex)
+                    |
+              remove item
+                    |
+               signal(mutex)
+                    |
+               signal(empty)
 ```
 
-### Why the order matters
+### Why are three semaphores needed?
 
-The producer first waits for an empty slot, then locks the buffer. The
-consumer first waits for a full slot, then locks the buffer. Both
-release `mutex` after the buffer operation and update the relevant
-counting semaphore.
+- `mutex`: stops the producer and consumer from modifying the buffer simultaneously.
+- `empty`: prevents the producer from inserting into a full buffer.
+- `full`: prevents the consumer from removing from an empty buffer.
 
-If a process holds `mutex` while waiting for `empty` or `full`, it can
-prevent the other side from entering to create the condition being
-awaited. This can lead to deadlock. Therefore, follow the standard
-ordering above.
+This is a standard conceptual bounded-buffer solution. Actual implementations use the synchronization API provided by the programming language or operating system.
 
-### Worked state example
+---
 
-Suppose `N = 3`, so initially:
+# Quick Revision
 
-``` text
-empty = 3, full = 0, mutex = 1
-```
+- **Process synchronization:** Coordinates cooperating processes that share data/resources.
+- **Cooperating processes:** One process can affect another because they share something.
+- **Race condition:** Output depends on the order/timing of concurrent access to shared data.
+- **Critical section:** Code that accesses shared data or resources.
+- **Entry section:** Requests permission to enter the critical section.
+- **Exit section:** Releases permission after leaving.
+- **Mutual exclusion:** At most one process enters the protected critical section at a time.
+- **Progress:** Interested processes should not be blocked indefinitely by processes that are not trying to enter.
+- **Bounded waiting:** A request should not be postponed forever.
+- **Peterson's solution:** Classic two-process software solution using `flag[]` and `turn`.
+- **Mutex:** Lock used to protect a critical section.
+- **Semaphore:** Coordination mechanism using atomic `wait` and `signal`.
+- **Binary semaphore:** Counter restricted to 0 or 1.
+- **Counting semaphore:** Counter represents multiple resource permits.
+- **Producer–consumer:** Uses `mutex`, `empty`, and `full` to coordinate a bounded shared buffer.
 
-After one successful production: - `empty = 2` - `full = 1` -
-`mutex = 1` after the operation completes
+---
 
-After one successful consumption: - `empty = 3` - `full = 0` -
-`mutex = 1` after the operation completes
+# Practice Questions
 
-The invariant is:
-
-``` text
-empty + full = N
-```
-
-This invariant assumes the semaphores accurately track the buffer and
-each operation completes correctly.
-
-## 10. Monitors --- introduction
-
-A **monitor** is a higher-level synchronization construct that
-combines: - Shared data - Procedures that operate on that data -
-Automatic mutual exclusion for monitor procedures under the standard
-monitor model - Condition variables for waiting until a condition
-becomes true
-
-Rather than asking programmers to manage a mutex and several semaphores
-manually at every access point, a monitor provides a structured way to
-protect shared state.
-
-### Conceptual structure
-
-``` text
-monitor Buffer:
-    shared buffer data
-
-    procedure insert(item):
-        // check capacity and insert safely
-
-    procedure remove():
-        // check availability and remove safely
-```
-
-Only one thread at a time is permitted to execute inside the monitor in
-the classic model. If a required condition is not satisfied, a thread
-can wait on a condition variable and allow another thread to enter and
-change the state.
-
-### Condition variables
-
-Common conceptual operations include: - `wait(condition)`: suspend until
-signalled; typically releases the monitor lock while waiting and
-reacquires it before continuing. - `signal(condition)`: notify a waiting
-thread that it may be able to proceed.
-
-The precise semantics vary across languages and monitor implementations.
-In many practical APIs, a thread must re-check the condition after
-waking, often by using a `while` loop.
-
-### Monitor vs semaphore
-
-  -----------------------------------------------------------------------
-  Monitor                             Semaphore
-  ----------------------------------- -----------------------------------
-  Higher-level structured construct   Lower-level synchronization
-                                      primitive
-
-  Groups shared data and operations   Maintains a counter/permit state
-
-  Mutual exclusion is typically built Correct locking and signaling order
-  into monitor entry                  must be designed explicitly
-
-  Condition variables coordinate      `wait` and `signal` operate on
-  waiting for conditions              semaphore permits
-  -----------------------------------------------------------------------
-
-------------------------------------------------------------------------
-
-# Part C --- Common mistakes and exam revision
-
-## 11. Common mistakes students should avoid
-
-1.  **Race condition is not the same as deadlock.** A race condition is
-    an incorrect timing-dependent outcome. Deadlock is a situation where
-    tasks are stuck waiting for one another or for resources.
-2.  **A critical section is not the entire program.** It is the specific
-    region requiring protected access.
-3.  **Mutual exclusion alone is insufficient.** Progress and bounded
-    waiting are also classical requirements.
-4.  **Peterson's algorithm is for two processes in its basic form.** Its
-    correctness relies on classical memory assumptions.
-5.  **`wait()` and `signal()` must be atomic semaphore operations.**
-    They are not simply ordinary counter changes.
-6.  **Binary semaphore and mutex are not always interchangeable.**
-    Ownership and API semantics can differ.
-7.  **Do not acquire `mutex` and then wait for a full/empty condition
-    while holding it** in the standard producer--consumer solution.
-8.  **A wake-up does not always guarantee the condition is still true.**
-    Re-check condition-variable predicates where required.
-
-## 12. Quick revision sheet
-
-  -----------------------------------------------------------------------
-  Term                                One-line meaning
-  ----------------------------------- -----------------------------------
-  Process synchronization             Coordinating concurrent tasks that
-                                      share data/resources
-
-  Race condition                      Result depends on
-                                      timing/interleaving
-
-  Critical section                    Code region that accesses protected
-                                      shared state
-
-  Mutual exclusion                    At most one task in a protected
-                                      critical section at a time
-
-  Progress                            Entry decision is not postponed
-                                      unnecessarily when the section is
-                                      free
-
-  Bounded waiting                     A requester cannot be bypassed
-                                      indefinitely
-
-  Peterson's solution                 Two-process software algorithm
-                                      using `flag[]` and `turn`
-
-  Mutex                               Lock commonly used to protect a
-                                      critical section
-
-  Semaphore                           Atomic wait/signal mechanism using
-                                      a counter
-
-  Binary semaphore                    Semaphore with logical states 0 and
-                                      1
-
-  Counting semaphore                  Semaphore that tracks multiple
-                                      permits
-
-  Producer--Consumer                  Coordination of adding/removing
-                                      items in a bounded buffer
-
-  Monitor                             Structured synchronization
-                                      construct with shared state and
-                                      procedures
-  -----------------------------------------------------------------------
-
-## 13. University-style questions
-
-### Short-answer questions (2--3 marks)
-
-1.  Define process synchronization.
-2.  What is a race condition? Give one example.
-3.  Define a critical section.
-4.  List the three requirements of a critical-section solution.
-5.  What is Peterson's solution?
-6.  Define mutex.
-7.  What are `wait()` and `signal()` in a semaphore?
-8.  Differentiate binary and counting semaphores.
-9.  What is a monitor?
-10. What are `empty`, `full`, and `mutex` in the Producer--Consumer
-    problem?
-
-### Long-answer questions (5--10 marks)
-
-1.  Explain the race condition with a suitable example and diagram.
-2.  Explain the critical-section problem and its four program sections.
-3.  Explain mutual exclusion, progress, and bounded waiting.
-4.  Write Peterson's algorithm for two processes and explain how it
-    works.
-5.  Compare mutexes and semaphores.
-6.  Explain binary and counting semaphores with examples.
-7.  State the Producer--Consumer problem and give a semaphore-based
-    solution.
-8.  Explain monitors and condition variables. Compare monitors with
-    semaphores.
-
-## 14. Suggested practical/classroom activities
-
--   **Race condition demonstration:** Use two threads incrementing a
-    shared counter; compare an unsynchronized version with a protected
-    version.
--   **Peterson dry run:** Let two students represent `P0` and `P1`;
-    track `flag[0]`, `flag[1]`, and `turn` on the board.
--   **Semaphore simulation:** Use five tokens to represent five permits.
-    Students must acquire a token before using a resource and return it
-    afterward.
--   **Producer--Consumer trace:** For buffer capacity 3, have the class
-    update `empty`, `full`, and `mutex` after each
-    production/consumption.
-
-------------------------------------------------------------------------
-
-## Final takeaway
-
-Synchronization is about preserving correctness when execution overlaps.
-Race conditions explain **why** coordination is needed; critical-section
-requirements define **what a correct solution must guarantee**;
-Peterson's algorithm demonstrates a classical software approach;
-mutexes, semaphores, and monitors provide practical synchronization
-mechanisms.
+1. Define process synchronization. Why is it needed?
+2. Differentiate independent and cooperating processes.
+3. Explain race condition using the shared variable example.
+4. Define a critical section and draw its four-part structure.
+5. Explain mutual exclusion, progress, bounded waiting, and the no-hardware/speed-assumption requirement.
+6. Explain Peterson's solution and the purpose of `flag[]` and `turn`.
+7. What is a mutex? Explain its working with a simple example.
+8. Define semaphore. Explain `wait()` and `signal()`.
+9. Differentiate binary and counting semaphores with examples.
+10. State the Producer–Consumer Problem and give a solution using semaphores.
